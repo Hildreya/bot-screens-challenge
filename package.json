@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Bot Discord pour concours de screenshots Dofus",
   "main": "index.js",
-  "type": "module",
+  "type": "commonjs",
   "scripts": {
     "start": "node index.js"
   },

@@ -1,0 +1,30 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+build/
+.env
+.env.local
+.env.*.local
+
+# Optional: OS and IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Optional: coverage reports
+coverage/
+*.lcov
+
+# Optional: logs
+logs/
+*.log
+
+# Optional: temp files
+tmp/
+temp/
