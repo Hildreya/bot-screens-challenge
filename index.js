@@ -1,39 +1,67 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder, PermissionsBitField } = require('discord.js');
 
 const TOKEN = process.env.TOKEN;
-const PREFIX = "!";
+const CLIENT_ID = process.env.CLIENT_ID;
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.GuildMessageReactions
-    ]
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessageReactions]
 });
 
 let extraScores = {}; // { userId: { skin:0, drole:0, lieu:0 } }
 
-client.on('clientReady', () => {
+// Définition des commandes slash
+const commands = [
+    new SlashCommandBuilder()
+        .setName('addparticipant')
+        .setDescription('Ajouter un participant avec 3 images')
+        .addUserOption(option => option.setName('user').setDescription('Utilisateur').setRequired(true))
+        .addStringOption(option => option.setName('img1').setDescription('Photo hiver').setRequired(true))
+        .addStringOption(option => option.setName('img2').setDescription('Photo été').setRequired(true))
+        .addStringOption(option => option.setName('img3').setDescription('Photo drôle').setRequired(true)),
+
+    new SlashCommandBuilder()
+        .setName('score')
+        .setDescription('Attribuer des points à un participant')
+        .addUserOption(option => option.setName('user').setDescription('Utilisateur').setRequired(true))
+        .addIntegerOption(option => option.setName('skin').setDescription('Points skin').setRequired(true))
+        .addIntegerOption(option => option.setName('drole').setDescription('Points drôle').setRequired(true))
+        .addIntegerOption(option => option.setName('lieu').setDescription('Points lieu').setRequired(true)),
+
+    new SlashCommandBuilder()
+        .setName('results')
+        .setDescription('Afficher le classement')
+].map(cmd => cmd.toJSON());
+
+// Enregistrement global des commandes
+const rest = new REST({ version: '10' }).setToken(TOKEN);
+
+client.once('clientReady', async () => {
     console.log(`✅ Connecté en tant que ${client.user.tag}`);
+    try {
+        await rest.put(
+            Routes.applicationCommands(CLIENT_ID),
+            { body: commands }
+        );
+        console.log("✅ Commandes slash enregistrées globalement !");
+    } catch (err) {
+        console.error(err);
+    }
 });
 
-client.on('messageCreate', async (message) => {
-    if (!message.content.startsWith(PREFIX) || message.author.bot) return;
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isCommand()) return;
 
-    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-    const command = args.shift().toLowerCase();
+    const { commandName } = interaction;
 
-    // Ajouter un participant
-    if (command === "addparticipant") {
-        const member = message.mentions.users.first();
-        if (!member || args.length < 3) {
-            return message.reply("Usage : !addParticipant @pseudo lien1 lien2 lien3");
-        }
-        const [img1, img2, img3] = args;
+    if (commandName === 'addparticipant') {
+        const user = interaction.options.getUser('user');
+        const img1 = interaction.options.getString('img1');
+        const img2 = interaction.options.getString('img2');
+        const img3 = interaction.options.getString('img3');
 
         const embed = new EmbedBuilder()
-            .setTitle(`Participant : ${member.username}`)
+            .setTitle(`Participant : ${user.username}`)
             .setDescription("Réagissez 👍 pour voter pour ce participant !")
             .setColor("Blue")
             .addFields(
@@ -42,30 +70,26 @@ client.on('messageCreate', async (message) => {
                 { name: "Photo drôle 🤪", value: img3 }
             );
 
-        const sent = await message.channel.send({ embeds: [embed] });
+        const sent = await interaction.reply({ embeds: [embed], fetchReply: true });
         await sent.react("👍");
     }
 
-    // Ajouter des points manuellement
-    if (command === "score") {
-        if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return message.reply("Tu n’as pas la permission d’attribuer des scores !");
+    if (commandName === 'score') {
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            return interaction.reply("Tu n’as pas la permission d’attribuer des scores !");
         }
-        const member = message.mentions.users.first();
-        if (!member) return message.reply("Usage : !score @pseudo skin=3 drole=2 lieu=1");
 
-        const params = args.join(" ");
-        const skin = parseInt(params.match(/skin=(\d+)/)?.[1] || "0");
-        const drole = parseInt(params.match(/drole=(\d+)/)?.[1] || "0");
-        const lieu = parseInt(params.match(/lieu=(\d+)/)?.[1] || "0");
+        const user = interaction.options.getUser('user');
+        const skin = interaction.options.getInteger('skin');
+        const drole = interaction.options.getInteger('drole');
+        const lieu = interaction.options.getInteger('lieu');
 
-        extraScores[member.id] = { skin, drole, lieu };
-        message.reply(`✅ Score ajouté pour ${member.username} → Skin:${skin}, Drôle:${drole}, Lieu:${lieu}`);
+        extraScores[user.id] = { skin, drole, lieu };
+        interaction.reply(`✅ Score ajouté pour ${user.username} → Skin:${skin}, Drôle:${drole}, Lieu:${lieu}`);
     }
 
-    // Résultats
-    if (command === "results") {
-        const messages = await message.channel.messages.fetch({ limit: 100 });
+    if (commandName === 'results') {
+        const messages = await interaction.channel.messages.fetch({ limit: 100 });
         let results = [];
 
         for (const msg of messages.values()) {
@@ -76,16 +100,11 @@ client.on('messageCreate', async (message) => {
 
                 if (participant && reaction) {
                     const userId = msg.mentions.users.first()?.id;
-                    const votes = reaction.count - 1; // ignorer le bot
+                    const votes = reaction.count - 1;
                     const extra = userId && extraScores[userId] ? extraScores[userId] : { skin: 0, drole: 0, lieu: 0 };
                     const total = votes + extra.skin + extra.drole + extra.lieu;
 
-                    results.push({
-                        name: participant,
-                        votes,
-                        extra,
-                        total,
-                    });
+                    results.push({ name: participant, votes, extra, total });
                 }
             }
         }
@@ -97,7 +116,7 @@ client.on('messageCreate', async (message) => {
             classement += `${i + 1}. ${r.name} – ${r.total} pts (👍 ${r.votes}, Skin ${r.extra.skin}, Drôle ${r.extra.drole}, Lieu ${r.extra.lieu})\n`;
         });
 
-        message.channel.send(classement);
+        interaction.reply(classement);
     }
 });
 
