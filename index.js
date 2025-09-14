@@ -1,3 +1,4 @@
+import "dotenv/config"; // charge les variables du fichier .env
 import { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField } from "discord.js";
 
 const client = new Client({
@@ -9,7 +10,7 @@ const client = new Client({
   ],
 });
 
-const TOKEN = "TON_TOKEN_ICI";
+const TOKEN = process.env.TOKEN; // ✅ récupéré depuis .env ou Render
 const PREFIX = "!";
 
 let extraScores = {}; // { userId: { skin:0, drole:0, lieu:0 } }
@@ -36,7 +37,7 @@ client.on("messageCreate", async (message) => {
       .addFields(
         { name: "Photo hiver ❄️", value: img1 },
         { name: "Photo été ☀️", value: img2 },
-        { name: "Photo drôle 🤪", value: img3 }
+        { name: "Photo originale 🤪", value: img3 }
       );
 
     const sent = await message.channel.send({ embeds: [embed] });
@@ -52,9 +53,9 @@ client.on("messageCreate", async (message) => {
     if (!member) return message.reply("Usage : !score @pseudo skin=3 drole=2 lieu=1");
 
     const params = args.join(" ");
-    const skin = parseInt(params.match(/skin=(\\d+)/)?.[1] || "0");
-    const drole = parseInt(params.match(/drole=(\\d+)/)?.[1] || "0");
-    const lieu = parseInt(params.match(/lieu=(\\d+)/)?.[1] || "0");
+    const skin = parseInt(params.match(/skin=(\d+)/)?.[1] || "0");
+    const drole = parseInt(params.match(/drole=(\d+)/)?.[1] || "0");
+    const lieu = parseInt(params.match(/lieu=(\d+)/)?.[1] || "0");
 
     extraScores[member.id] = { skin, drole, lieu };
 
