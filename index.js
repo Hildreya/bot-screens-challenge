@@ -60,23 +60,39 @@ client.on('interactionCreate', async interaction => {
         const img2 = interaction.options.getString('img2');
         const img3 = interaction.options.getString('img3');
 
-        const embed = new EmbedBuilder()
-            .setTitle(`Participant : ${user.username}`)
-            .setDescription("Réagissez 👍 pour voter pour ce participant !")
+        // Trois embeds séparés (un par image) → chaque image sera une "vignette"
+        const embed1 = new EmbedBuilder()
+            .setTitle(`Participant : ${user.username} – Hiver ❄️`)
+            .setImage(img1)
             .setColor("Blue")
-            .addFields(
-                { name: "Photo hiver ❄️", value: img1 },
-                { name: "Photo été ☀️", value: img2 },
-                { name: "Photo drôle 🤪", value: img3 }
-            );
+            .setFooter({ text: user.id });
 
-        const sent = await interaction.reply({ embeds: [embed], fetchReply: true });
+        const embed2 = new EmbedBuilder()
+            .setTitle(`Participant : ${user.username} – Été ☀️`)
+            .setImage(img2)
+            .setColor("Orange")
+            .setFooter({ text: user.id });
+
+        const embed3 = new EmbedBuilder()
+            .setTitle(`Participant : ${user.username} – Insolite 🤪`)
+            .setImage(img3)
+            .setColor("Green")
+            .setFooter({ text: user.id });
+
+        // On envoie les trois embeds et on récupère le message
+        const sent = await interaction.reply({
+            content: `Réagissez 👍 pour voter pour **${user.username}** !`,
+            embeds: [embed1, embed2, embed3],
+            fetchReply: true
+        });
+
         await sent.react("👍");
     }
 
+
     if (commandName === 'score') {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply("Tu n’as pas la permission d’attribuer des scores !");
+            return interaction.reply("❌ Tu n’as pas la permission d’attribuer des scores !");
         }
 
         const user = interaction.options.getUser('user');
@@ -90,34 +106,56 @@ client.on('interactionCreate', async interaction => {
 
     if (commandName === 'results') {
         const messages = await interaction.channel.messages.fetch({ limit: 100 });
-        let results = [];
+        let results = {};
 
         for (const msg of messages.values()) {
             if (msg.embeds.length > 0) {
                 const embed = msg.embeds[0];
-                const participant = embed.title?.replace("Participant : ", "");
+
+                // ID du joueur stocké dans le footer
+                const userId = embed.footer?.text;
+                if (!userId) continue;
+
+                // Nom du joueur (on coupe avant le "–")
+                const participant = embed.title?.split(" – ")[0].replace("Participant : ", "");
                 const reaction = msg.reactions.cache.get("👍");
 
                 if (participant && reaction) {
-                    const userId = msg.mentions.users.first()?.id;
-                    const votes = reaction.count - 1;
-                    const extra = userId && extraScores[userId] ? extraScores[userId] : { skin: 0, drole: 0, lieu: 0 };
-                    const total = votes + extra.skin + extra.drole + extra.lieu;
+                    const votes = (reaction.count - 1) * 2; // on enlève le bot
 
-                    results.push({ name: participant, votes, extra, total });
+                    if (!results[userId]) {
+                        results[userId] = {
+                            name: participant,
+                            votes: 0,
+                            extra: extraScores[userId] || { skin: 0, drole: 0, lieu: 0 }
+                        };
+                    }
+
+                    // On additionne les votes des différentes images
+                    results[userId].votes += votes;
                 }
             }
         }
 
-        results.sort((a, b) => b.total - a.total);
+        // Transformer l’objet en tableau
+        const classementArray = Object.values(results).map(r => ({
+            name: r.name,
+            votes: r.votes,
+            extra: r.extra,
+            total: r.votes + r.extra.skin + r.extra.drole + r.extra.lieu
+        }));
+
+        // Tri par score
+        classementArray.sort((a, b) => b.total - a.total);
 
         let classement = "🏆 **Résultats du concours :**\n";
-        results.forEach((r, i) => {
+        classementArray.forEach((r, i) => {
             classement += `${i + 1}. ${r.name} – ${r.total} pts (👍 ${r.votes}, Skin ${r.extra.skin}, Drôle ${r.extra.drole}, Lieu ${r.extra.lieu})\n`;
         });
 
         interaction.reply(classement);
     }
+
 });
 
 client.login(TOKEN).catch(err => console.error("Impossible de se connecter :", err));
