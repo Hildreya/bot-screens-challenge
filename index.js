@@ -91,7 +91,7 @@ client.on('interactionCreate', async interaction => {
 
 
     if (commandName === 'score') {
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        if (!interaction.member.roles.cache.has('1251881351825854525') || !interaction.member.roles.cache.has('1096964311718567946')) {
             return interaction.reply("❌ Tu n’as pas la permission d’attribuer des scores !");
         }
 
